@@ -2,7 +2,7 @@
 
 Voice control of an LED on the ESP32-S3: an I2S microphone is sampled continuously, a 1-second sliding window is classified, and the result switches the LED on, off, or toggles it.
 
-> **Status:** the Edge Impulse model (`components/edge_impulse`, keyword `carlos`) is integrated: saying the keyword toggles the LED. The old loudness stub is still available via `WW_USE_ENERGY_STUB` in `src/wake_word.c`.
+> **Status:** the Edge Impulse model (`components/edge_impulse`, keyword `carlos`) is integrated: saying the keyword makes the LED blink twice (the stored on/off state is restored afterwards). The old loudness stub is still available via `WW_USE_ENERGY_STUB` in `src/wake_word.c`.
 
 ## Hardware
 
@@ -71,9 +71,9 @@ flowchart TD
         I["xQueueReceive frame"] --> J["Slide 1 s window: memmove + append frame"]
         J --> K{"cooldown > 0?"}
         K -- yes --> L["cooldown--"] --> I
-        K -- no --> M{"8 frames collected?"}
+        K -- no --> M{"Word ended? (loud burst, then 5 quiet frames, then post-roll to centre it)"}
         M -- no --> I
-        M -- yes --> N["wake_word_process(window)"]
+        M -- yes --> N["wake_word_process(window): once per word"]
         N --> O{"label != NONE and score >= 0.6?"}
         O -- no --> I
         O -- yes --> P["led_set_state(cmd): take mutex, change state, give mutex, notify led_task"]
@@ -111,10 +111,14 @@ mic → audio_task → audio_queue → inference_task → [mutex: led_level] →
 |------|------|
 | `src/audio.c/.h` | I2S setup; reads 512-sample (32 ms) frames, converts 32→16 bit, pushes to `audio_queue` |
 | `src/wake_word.c/.h` | Classifier interface (`wake_word_process`) returning `WW_NONE/ON/OFF/TOGGLE` plus a score; currently the energy stub |
-| `src/main.c` | `inference_task`: maintains the 1 s window, runs inference every 256 ms, 1 s cooldown after a detection |
+| `src/main.c` | `inference_task`: maintains the 1 s window, detects a spoken word as an energy burst (VAD), runs inference once after it ends with the word centred in the window, 1 s cooldown after a detection |
 | `src/led.c/.h` | `led_set_state()` changes the shared LED state under a mutex and notifies `led_task`, which reads the state under the mutex and drives GPIO 15 |
 
 Inference runs on core 0 so it does not interfere with I2S reads on core 1.
+
+## Recording the microphone (debug)
+
+Off by default. To enable, add `build_flags = -DREC_ENABLED=1` (optionally `-DREC_PERIOD_S=30`) to `platformio.ini`; every period one 1 s window is dumped over serial. Close the monitor and run `~/.platformio/penv/bin/python tools/serial_to_wav.py <port>` to save WAV files into `recordings/`.
 
 ## Updating the model
 

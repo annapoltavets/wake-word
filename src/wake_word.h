@@ -14,7 +14,8 @@ typedef enum
 	WW_NONE,
 	WW_ON,
 	WW_OFF,
-	WW_TOGGLE
+	WW_TOGGLE,
+	WW_BLINK
 } ww_label_t;
 
 typedef struct

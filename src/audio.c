@@ -3,6 +3,7 @@
 #include "driver/i2s_std.h"
 #include <math.h>
 #include "esp_log.h"
+#include "esp_timer.h"
 
 static const char *TAG = "AUDIO";
 
@@ -11,7 +12,7 @@ static i2s_chan_handle_t rx_chan;
 
 esp_err_t audio_init(void)
 {
-	audio_queue = xQueueCreate(8, sizeof(audio_frame_t));
+	audio_queue = xQueueCreate(AUDIO_QUEUE_DEPTH, sizeof(audio_frame_t));
 	if (audio_queue == NULL)
 	{
 		return ESP_ERR_NO_MEM;
@@ -59,6 +60,7 @@ void audio_task(void *pvParameters)
 			continue;
 		}
 
+		frame.t_us = esp_timer_get_time();
 		size_t n = bytes_read / sizeof(int32_t);
 		for (size_t i = 0; i < n; i++)
 		{

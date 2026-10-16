@@ -12,9 +12,11 @@
 
 #define AUDIO_SAMPLE_RATE 16000
 #define AUDIO_FRAME_SAMPLES 512 // 32 мс
+#define AUDIO_QUEUE_DEPTH 8
 
 typedef struct
 {
+	int64_t t_us; // esp_timer на момент, коли кадр прочитано з I2S (для вимірювання затримки)
 	int16_t samples[AUDIO_FRAME_SAMPLES];
 } audio_frame_t;
 

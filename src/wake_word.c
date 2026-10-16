@@ -49,11 +49,11 @@ void wake_word_process(const int16_t *window, ww_result_t *result)
 		result->score = 1.0f;
 	}
 #else
-	// єдине ключове слово модель сприймається як перемикач діода
+	// єдине ключове слово: діод двічі блимає
 	float score = 0.0f;
 	if (ei_wrapper_classify(window, WW_KEYWORD_LABEL, &score) == ESP_OK)
 	{
-		result->label = WW_TOGGLE;
+		result->label = WW_BLINK;
 		result->score = score;
 	}
 #endif
