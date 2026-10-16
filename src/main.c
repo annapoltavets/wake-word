@@ -6,6 +6,7 @@
 
 #include "audio.h"
 #include "led.h"
+#include "recorder.h"
 #include "wake_word.h"
 
 static const char *TAG = "MAIN";
@@ -46,7 +47,9 @@ static void inference_task(void *pvParameters)
 		}
 		frames = 0;
 
+		recorder_capture(window);
 		wake_word_process(window, &result);
+		ESP_LOGI(TAG, "inference label=%d score=%.2f", result.label, result.score);
 		if (result.label == WW_NONE || result.score < WW_THRESHOLD)
 		{
 			continue;
@@ -76,9 +79,12 @@ void app_main(void)
 	led_init();
 	ESP_ERROR_CHECK(audio_init());
 	ESP_ERROR_CHECK(wake_word_init());
+	ESP_ERROR_CHECK(recorder_init());
 
 	xTaskCreatePinnedToCore(led_task, "led_task", 2048, NULL, 4, NULL, 1);
 	xTaskCreatePinnedToCore(audio_task, "audio_task", 4096, NULL, 6, NULL, 1);
+	// повільний дамп у serial на ядрі 0 з низьким пріоритетом
+	xTaskCreatePinnedToCore(recorder_task, "recorder_task", 4096, NULL, 1, NULL, 0);
 	// важкий інференс на ядрі 0, щоб не заважати читанню I2S
-	xTaskCreatePinnedToCore(inference_task, "inference_task", 8192, NULL, 5, NULL, 0);
+	xTaskCreatePinnedToCore(inference_task, "inference_task", 16384, NULL, 5, NULL, 0);
 }

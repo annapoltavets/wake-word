@@ -2,7 +2,7 @@
 
 Voice control of an LED on the ESP32-S3: an I2S microphone is sampled continuously, a 1-second sliding window is classified, and the result switches the LED on, off, or toggles it.
 
-> **Status:** the wake-word model is not integrated yet. A loudness-based stub (`WW_USE_ENERGY_STUB` in `src/wake_word.c`) stands in for it: any loud sound (clap, voice) toggles the LED. This lets you verify the whole chain microphone → tasks → LED before plugging in a real model.
+> **Status:** the Edge Impulse model (`components/edge_impulse`, keyword `carlos`) is integrated: saying the keyword toggles the LED. The old loudness stub is still available via `WW_USE_ENERGY_STUB` in `src/wake_word.c`.
 
 ## Hardware
 
@@ -61,7 +61,7 @@ flowchart TD
     B --> C["Create tasks: led_task, audio_task, inference_task"]
 
     subgraph AT["audio_task (core 1, prio 6)"]
-        D["i2s_channel_read: 512 samples, 32 bit"] --> E["Shift >> 14 and clamp to int16"]
+        D["i2s_channel_read: 512 samples, 32 bit"] --> E["Shift >> 16 and clamp to int16"]
         E --> F{"audio_queue full?"}
         F -- yes --> G["Log warning, drop frame"]
         F -- no --> H["xQueueSend frame"]
@@ -74,7 +74,7 @@ flowchart TD
         K -- no --> M{"8 frames collected?"}
         M -- no --> I
         M -- yes --> N["wake_word_process(window)"]
-        N --> O{"label != NONE and score >= 0.8?"}
+        N --> O{"label != NONE and score >= 0.6?"}
         O -- no --> I
         O -- yes --> P["led_set_state(cmd): take mutex, change state, give mutex, notify led_task"]
         P --> Q["cooldown = 31 frames"] --> I
@@ -116,8 +116,8 @@ mic → audio_task → audio_queue → inference_task → [mutex: led_level] →
 
 Inference runs on core 0 so it does not interfere with I2S reads on core 1.
 
-## Plugging in a real model
+## Updating the model
 
-1. Load the model (e.g. TFLite Micro) and allocate the tensor arena in `wake_word_init()`.
-2. Implement feature extraction (MFCC / spectrogram) and inference in the `#else` branch of `wake_word_process()`, and set `WW_USE_ENERGY_STUB` to `0`.
-3. Make sure `WW_WINDOW_SAMPLES` (`wake_word.h`) matches the model's input, and tune `WW_THRESHOLD`.
+1. Export the C++ library from Edge Impulse Studio and replace `edge-impulse-sdk/`, `model-parameters/`, `tflite-model/` in `components/edge_impulse/`.
+2. If the labels changed, update `WW_KEYWORD_LABEL` (and the label→command mapping) in `src/wake_word.c`.
+3. Make sure `WW_WINDOW_SAMPLES` (`wake_word.h`) matches the model's input (checked at startup in `wake_word_init()`), and tune `WW_THRESHOLD`.

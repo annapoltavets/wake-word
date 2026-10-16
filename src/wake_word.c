@@ -2,18 +2,29 @@
 
 #include <math.h>
 #include "esp_log.h"
+#include "ei_wrapper.h"
 
 static const char *TAG = "WAKE_WORD";
 
-// TODO: модель ще не підключена. Поки що заглушка за гучністю (хлопок/голос),
-// щоб перевірити ланцюг мікрофон -> задачі -> діод. Поставити 0 після підключення моделі.
-#define WW_USE_ENERGY_STUB 1
+// 1 = заглушка за гучністю (хлопок/голос) для перевірки ланцюга мікрофон -> задачі -> діод,
+// 0 = модель Edge Impulse (components/edge_impulse)
+#define WW_USE_ENERGY_STUB 0
+// Мітка ключового слова в моделі (інша мітка - "unknown")
+#define WW_KEYWORD_LABEL "carlos"
 #define WW_STUB_RMS_LEVEL 3000.0f
 
 esp_err_t wake_word_init(void)
 {
-	// TODO: завантажити модель (напр. TFLite Micro) і виділити tensor arena
-	ESP_LOGW(TAG, "model not loaded, using energy stub");
+#if WW_USE_ENERGY_STUB
+	ESP_LOGW(TAG, "using energy stub");
+#else
+	if (ei_wrapper_window_samples() != WW_WINDOW_SAMPLES)
+	{
+		ESP_LOGE(TAG, "model expects %u samples, WW_WINDOW_SAMPLES=%d",
+				 (unsigned)ei_wrapper_window_samples(), WW_WINDOW_SAMPLES);
+		return ESP_ERR_INVALID_SIZE;
+	}
+#endif
 	return ESP_OK;
 }
 
@@ -38,7 +49,12 @@ void wake_word_process(const int16_t *window, ww_result_t *result)
 		result->score = 1.0f;
 	}
 #else
-	// TODO: features (MFCC / spectrogram) -> інференс -> argmax у result
-	(void)window;
+	// єдине ключове слово модель сприймається як перемикач діода
+	float score = 0.0f;
+	if (ei_wrapper_classify(window, WW_KEYWORD_LABEL, &score) == ESP_OK)
+	{
+		result->label = WW_TOGGLE;
+		result->score = score;
+	}
 #endif
 }

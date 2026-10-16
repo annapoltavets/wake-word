@@ -7,7 +7,7 @@
 // Вікно, яке очікує модель: 1 с аудіо 16 кГц mono int16
 #define WW_WINDOW_SAMPLES 16000
 // Мінімальна впевненість, щоб прийняти результат
-#define WW_THRESHOLD 0.8f
+#define WW_THRESHOLD 0.6f
 
 typedef enum
 {

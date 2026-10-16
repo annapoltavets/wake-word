@@ -1,6 +1,7 @@
 #include "audio.h"
 
 #include "driver/i2s_std.h"
+#include <math.h>
 #include "esp_log.h"
 
 static const char *TAG = "AUDIO";
@@ -46,6 +47,10 @@ void audio_task(void *pvParameters)
 	static int32_t raw[AUDIO_FRAME_SAMPLES];
 	audio_frame_t frame;
 	size_t bytes_read;
+	float sum_sq = 0.0f;
+	uint32_t sum_n = 0;
+	int32_t peak = 0;
+	uint32_t frames = 0;
 
 	for (;;)
 	{
@@ -57,13 +62,29 @@ void audio_task(void *pvParameters)
 		size_t n = bytes_read / sizeof(int32_t);
 		for (size_t i = 0; i < n; i++)
 		{
-			// 32 біти -> 16 біт (корисні 24 біти, зсув 14 дає запас підсилення)
-			int32_t s = raw[i] >> 14;
+			// 32 біти -> 16 біт (корисні 24 біти, зсув 16 без підсилення; 14 давало кліпінг мови)
+			int32_t s = raw[i] >> 16;
 			if (s > INT16_MAX)
 				s = INT16_MAX;
 			if (s < INT16_MIN)
 				s = INT16_MIN;
 			frame.samples[i] = (int16_t)s;
+
+			sum_sq += (float)s * s;
+			int32_t a = s < 0 ? -s : s;
+			if (a > peak)
+				peak = a;
+		}
+		sum_n += n;
+
+		// рівень мікрофона раз на ~1 с (31 кадр по 32 мс)
+		if (++frames >= 31)
+		{
+			ESP_LOGI(TAG, "mic rms=%.0f peak=%ld", sum_n ? sqrtf(sum_sq / sum_n) : 0.0f, (long)peak);
+			sum_sq = 0.0f;
+			sum_n = 0;
+			peak = 0;
+			frames = 0;
 		}
 
 		if (n == AUDIO_FRAME_SAMPLES && xQueueSend(audio_queue, &frame, 0) != pdTRUE)
